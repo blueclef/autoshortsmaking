@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Shorts Automator</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <main>
+        <h1>유튜브 숏폼 자동화</h1>
+        <form id="projectForm">
+            <label for="title">프로젝트 제목</label>
+            <input type="text" id="title" name="title" required>
+
+            <label for="script">스크립트</label>
+            <textarea id="script" name="script" rows="10" required placeholder="장면별 스크립트를 여기에 입력하세요..."></textarea>
+
+            <button type="submit">영상 생성 시작</button>
+        </form>
+        <div id="status">
+            <h2>상태</h2>
+            <pre id="status-output">작업 대기 중...</pre>
+        </div>
+        <div id="preview">
+            <h2>결과 미리보기</h2>
+            <video id="video-preview" controls style="display:none; width: 100%; max-width: 360px;"></video>
+        </div>
+    </main>
+    <script>
+        document.getElementById('projectForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const form = e.target;
+            const formData = new FormData(form);
+            const data = Object.fromEntries(formData.entries());
+
+            const statusOutput = document.getElementById('status-output');
+            statusOutput.textContent = '생성 요청을 보냈습니다. 잠시만 기다려주세요...';
+
+            try {
+                // This will be the endpoint to start the video generation process
+                const response = await fetch('/api/create_project', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data),
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const result = await response.json();
+                statusOutput.textContent = `작업 ID: ${result.task_id}\n상태를 확인합니다...`;
+
+                // Poll for status
+                pollStatus(result.task_id);
+
+            } catch (error) {
+                statusOutput.textContent = `오류가 발생했습니다: ${error.message}`;
+                console.error('Error:', error);
+            }
+        });
+
+        function pollStatus(taskId) {
+            const statusOutput = document.getElementById('status-output');
+            const interval = setInterval(async () => {
+                try {
+                    const response = await fetch(`/api/project/${taskId}/status`);
+                    if (!response.ok) {
+                        throw new Error(`Status check failed: ${response.status}`);
+                    }
+                    const result = await response.json();
+
+                    let statusText = `작업 ID: ${taskId}\n상태: ${result.status}`;
+
+                    if (result.status === 'PROGRESS') {
+                        statusText += `\n진행률: ${result.result.progress}%\n메시지: ${result.result.message}`;
+                    } else if (result.status === 'SUCCESS') {
+                        clearInterval(interval);
+                        statusText += `\n\n생성 완료!`;
+                        const videoPreview = document.getElementById('video-preview');
+                        // The video path is now in result.result.video_url
+                        videoPreview.src = result.result.video_url;
+                        videoPreview.style.display = 'block';
+                    } else if (result.status === 'FAILURE') {
+                        clearInterval(interval);
+                        statusText += `\n\n오류: ${result.result.message}`;
+                    }
+
+                    statusOutput.textContent = statusText;
+
+                } catch (error) {
+                    console.error('Status poll error:', error);
+                    statusOutput.textContent += '\n상태 확인 중 오류 발생.';
+                    clearInterval(interval); // Stop polling on error
+                }
+            }, 3000);
+        }
+    </script>
+</body>
+</html>

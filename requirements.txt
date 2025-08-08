@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+requests
+python-dotenv
+ffmpeg-python
+Pillow
+celery
+redis
