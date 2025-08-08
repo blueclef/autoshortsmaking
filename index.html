@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shorts Generator</title>
+    <style>
+        body { font-family: sans-serif; margin: 2em; }
+        textarea { width: 100%; height: 200px; }
+        button { margin-top: 1em; padding: 0.5em 1em; }
+        #status { margin-top: 1em; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>YouTube Shorts Script</h1>
+    <textarea id="script-input" placeholder="Enter your script here, with each line representing a scene..."></textarea>
+    <button onclick="startVideoCreation()">Create Video</button>
+    <div id="status"></div>
+    <script>
+        let taskId = null;
+
+        async function startVideoCreation() {
+            const script = document.getElementById('script-input').value;
+            if (!script) {
+                alert('Please enter a script.');
+                return;
+            }
+
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = 'Sending task to server...';
+
+            try {
+                const response = await fetch('/api/create_project', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title: 'My Video', script: script })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Server error: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                taskId = data.task_id;
+                statusDiv.textContent = `Task created with ID: ${taskId}. Now checking status...`;
+                checkStatus();
+            } catch (error) {
+                statusDiv.textContent = `Error: ${error.message}`;
+                console.error(error);
+            }
+        }
+
+        async function checkStatus() {
+            if (!taskId) return;
+
+            const statusDiv = document.getElementById('status');
+            try {
+                const response = await fetch(`/api/project/${taskId}/status`);
+                if (!response.ok) {
+                    throw new Error(`Server error: ${response.statusText}`);
+                }
+                const data = await response.json();
+
+                let statusMessage = `Task Status: ${data.status}`;
+                if (data.status === 'PROGRESS') {
+                    statusMessage += ` - ${data.result.message} (${data.result.current_step}/${data.result.total_steps})`;
+                } else if (data.status === 'SUCCESS') {
+                    statusMessage += ` - Video created at: ${data.result.output_path}`;
+                    // Stop checking once successful
+                    return;
+                } else if (data.status === 'FAILURE') {
+                    statusMessage += ` - Error: ${data.result.message}`;
+                     // Stop checking on failure
+                    return;
+                }
+                
+                statusDiv.textContent = statusMessage;
+
+                // If the task is still running, check again after 2 seconds
+                if (data.status === 'PENDING' || data.status === 'PROGRESS') {
+                    setTimeout(checkStatus, 2000);
+                }
+
+            } catch (error) {
+                statusDiv.textContent = `Error checking status: ${error.message}`;
+                console.error(error);
+            }
+        }
+    </script>
+</body>
+</html>

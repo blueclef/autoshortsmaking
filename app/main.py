@@ -1,15 +1,29 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from celery.result import AsyncResult
+import os
 
 # Import the celery task
 from app.celery_worker import create_video_task
 
 app = FastAPI()
 
+# Mount static files
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Setup templates
+templates = Jinja2Templates(directory=".")
+
 class ProjectCreate(BaseModel):
     title: str
     script: str
+
+@app.get("/", response_class=HTMLResponse)
+async def read_root(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request})
 
 @app.post("/api/create_project")
 def create_project(project: ProjectCreate):
